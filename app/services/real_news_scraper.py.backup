@@ -1,0 +1,334 @@
+import asyncio
+import logging
+import json
+import hashlib
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+import aiohttp
+import feedparser
+from newspaper import Article
+from bs4 import BeautifulSoup
+import time
+from dateutil import parser # Added for date parsing
+
+logger = logging.getLogger(__name__)
+
+class RealNewsScraperService:
+    """Service for scraping real news from Australian news sources"""
+
+    def __init__(self, config_path: str = "config/news_sources.json"):
+        self.config_path = config_path
+        self.sources = []
+        self.session = None
+        self.load_sources()
+
+    def load_sources(self):
+        """Load news sources from configuration"""
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                
+                # Handle nested structure: sources -> categories -> list of sources
+                sources_config = config.get('sources', {})
+                self.sources = []
+                
+                if isinstance(sources_config, dict):
+                    # Flatten the nested structure
+                    for category, category_sources in sources_config.items():
+                        if isinstance(category_sources, list):
+                            for source in category_sources:
+                                # Add category to each source
+                                source['category'] = category
+                                self.sources.append(source)
+                elif isinstance(sources_config, list):
+                    # Direct list of sources
+                    self.sources = sources_config
+                    
+            logger.info(f"Loaded {len(self.sources)} news sources")
+        except Exception as e:
+            logger.error(f"Error loading sources config: {e}")
+            # Fallback to default sources
+            self.sources = self._get_default_sources()
+
+    def _get_default_sources(self):
+        """Get default Australian news sources"""
+        return [
+            {
+                "name": "ABC Sport",
+                "rss_feed": "https://www.abc.net.au/news/feed/2942460/rss.xml",
+                "type": "rss",
+                "category": "sports"
+            },
+            {
+                "name": "Nine Sport",
+                "rss_feed": "https://www.9news.com.au/rss",
+                "type": "rss", 
+                "category": "sports"
+            },
+            {
+                "name": "ABC Lifestyle",
+                "rss_feed": "https://www.abc.net.au/news/feed/2942462/rss.xml",
+                "type": "rss",
+                "category": "lifestyle"
+            },
+            {
+                "name": "Nine Finance",
+                "rss_feed": "https://www.9news.com.au/rss",
+                "type": "rss",
+                "category": "finance"
+            }
+        ]
+
+    async def __aenter__(self):
+        """Async context manager entry"""
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+            headers={'User-Agent': 'FOBOH News Aggregator 1.0'}
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit"""
+        if self.session:
+            await self.session.close()
+
+    async def scrape_all_sources(self, max_articles_per_source: int = 10) -> List[Dict]:
+        """Scrape all configured news sources"""
+        all_articles = []
+
+        for source in self.sources:
+            try:
+                logger.info(f"Scraping {source['name']}...")
+                articles = await self.scrape_source(source, max_articles_per_source)
+                all_articles.extend(articles)
+                logger.info(f"Extracted {len(articles)} articles from {source['name']}")
+
+                # Rate limiting - be respectful to news sites
+                await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.error(f"Error scraping {source['name']}: {e}")
+                continue
+
+        logger.info(f"Total articles extracted: {len(all_articles)}")
+        return all_articles
+
+    async def scrape_source(self, source: Dict, max_articles: int = 10) -> List[Dict]:
+        """Scrape a single news source"""
+        rss_url = source.get('rss_url') or source.get('rss_feed')
+        if source.get('type') == 'rss' and rss_url:
+            return await self.scrape_rss(source, max_articles)
+        else:
+            return await self.scrape_web(source, max_articles)
+
+    async def scrape_rss(self, source: Dict, max_articles: int = 10) -> List[Dict]:
+        """Scrape RSS feed"""
+        articles = []
+
+        try:
+            rss_url = source.get('rss_url') or source.get('rss_feed')
+            async with self.session.get(rss_url) as response:
+                if response.status == 200:
+                    content = await response.text()
+                    feed = feedparser.parse(content)
+                    
+                    for entry in feed.entries[:max_articles]:
+                        try:
+                            # Extract full article content, fall back to RSS summary
+                            article_content = await self.extract_article_content(entry.link)
+                            
+                            # Use RSS summary if full content extraction fails, also try description
+                            content = article_content if article_content and len(article_content) > 100 else entry.get('summary', entry.get('description', ''))
+                            
+                            # For music content, be more lenient with content length
+                            min_length = 30 if 'music' in entry.title.lower() or any(keyword in entry.title.lower() for keyword in ['album', 'song', 'artist', 'band', 'concert']) else 50
+                            
+                            # Skip if no meaningful content
+                                                        if not content or len(content.strip()) < min_length:
+                                continue
+
+                            # Force music category for music sources or auto-detect
+                            article_category = source['category']
+                            if article_category == 'lifestyle' and 'music' in source['name'].lower():
+                                article_category = 'music'
+                            elif article_category == 'lifestyle':
+                                # Try to auto-categorize
+                                detected_category = self.categorize_by_keywords(entry.title, content)
+                                if detected_category != 'lifestyle':
+                                    article_category = detected_category
+
+                            article = {
+                                'title': entry.title,
+                                'content': content,
+                                'url': entry.link,
+                                'source_name': source['name'],
+                                'category': article_category,
+                                'published_date': self.parse_date(entry.get('published')),
+                                'extracted_date': datetime.utcnow(),
+                                'content_hash': self.generate_content_hash(entry.title, content, entry.link),
+                                'author': entry.get('author', 'Unknown'),
+                                'is_breaking_news': self.detect_breaking_news(entry.title, content)
+                            }
+                            articles.append(article)
+                            
+                        except Exception as e:
+                            logger.error(f"Error processing RSS entry from {source['name']}: {e}")
+                            continue
+                            
+        except Exception as e:
+            logger.error(f"Error fetching RSS from {source['name']}: {e}")
+        
+        return articles
+
+    async def scrape_web(self, source: Dict, max_articles: int = 10) -> List[Dict]:
+        """Scrape website directly"""
+        articles = []
+
+        try:
+            async with self.session.get(source['url']) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    soup = BeautifulSoup(html, 'html.parser')
+
+                    # Find article links using selectors
+                    article_links = []
+                    selectors = source.get('selectors', {})
+
+                    if selectors.get('article_links'):
+                        links = soup.select(selectors['article_links'])
+                        for link in links[:max_articles]:
+                            href = link.get('href')
+                            if href:
+                                if href.startswith('/'):
+                                    href = f"{source['url'].rstrip('/')}{href}"
+                                article_links.append(href)
+
+                    # Extract content from each article
+                    for link in article_links:
+                        try:
+                            article_data = await self.extract_full_article(link, source)
+                            if article_data:
+                                articles.append(article_data)
+                                await asyncio.sleep(1)  # Rate limiting
+                        except Exception as e:
+                            logger.error(f"Error extracting article from {link}: {e}")
+                            continue
+                            
+        except Exception as e:
+            logger.error(f"Error scraping website {source['name']}: {e}")
+        
+        return articles
+
+    async def extract_article_content(self, url: str) -> Optional[str]:
+        """Extract article content using newspaper3k with better headers"""
+        try:
+            # Use better headers to avoid 403 errors
+            article = Article(url)
+            article.set_headers({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            })
+            
+            article.download()
+            article.parse()
+
+            return article.text if article.text else None
+
+        except Exception as e:
+            logger.debug(f"Error extracting content from {url}: {e}")
+            return None
+
+    async def extract_full_article(self, url: str, source: Dict) -> Optional[Dict]:
+        """Extract full article data"""
+        try:
+            # Use newspaper3k for robust extraction with better headers
+            article = Article(url)
+            article.set_headers({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            })
+            
+            article.download()
+            article.parse()
+
+            if not article.text or len(article.text) < 100:
+                return None
+
+            return {
+                'title': article.title or 'Untitled',
+                'content': article.text,
+                'url': url,
+                'source_name': source['name'],
+                'category': source['category'],
+                'published_date': article.publish_date or datetime.utcnow(),
+                'extracted_date': datetime.utcnow(),
+                'content_hash': self.generate_content_hash(article.title or '', article.text, url),
+                'author': ', '.join(article.authors) if article.authors else 'Unknown',
+                'is_breaking_news': self.detect_breaking_news(article.title or '', article.text)
+            }
+
+        except Exception as e:
+            logger.debug(f"Error extracting full article from {url}: {e}")
+            return None
+
+    def parse_date(self, date_str: str) -> Optional[datetime]:
+        """Parse date string to datetime"""
+        if not date_str:
+            return None
+
+        try:
+            return parser.parse(date_str)
+        except:
+            return None
+
+    def generate_content_hash(self, title: str, content: str, url: str = "") -> str:
+        """Generate hash for duplicate detection"""
+        combined = f"{title}{content}{url}".lower().strip()
+        return hashlib.md5(combined.encode()).hexdigest()
+
+    def detect_breaking_news(self, title: str, content: str) -> bool:
+        """Detect if this is breaking news"""
+        breaking_keywords = [
+            'breaking', 'urgent', 'alert', 'developing', 'just in',
+            'live', 'update', 'emergency', 'confirmed', 'exclusive'
+        ]
+
+        text = f"{title} {content}".lower()
+        return any(keyword in text for keyword in breaking_keywords)
+
+    def categorize_by_keywords(self, title: str, content: str) -> str:
+        """Categorize article based on keywords"""
+        text = f"{title} {content}".lower()
+
+        # Sports keywords
+        sports_keywords = ['afl', 'nrl', 'cricket', 'rugby', 'tennis', 'basketball', 'soccer', 'football', 'olympics', 'sport']
+        if any(keyword in text for keyword in sports_keywords):
+            return 'sports'
+
+        # Music keywords
+        music_keywords = ['music', 'album', 'song', 'artist', 'concert', 'tour', 'band', 'singer', 'festival', 'musician', 'vinyl', 'streaming', 'spotify', 'charts', 'grammy', 'aria', 'live music', 'gig', 'venue', 'performance']
+        if any(keyword in text for keyword in music_keywords):
+            return 'music'
+
+        # Finance keywords
+        finance_keywords = ['asx', 'market', 'stock', 'investment', 'economy', 'financial', 'bank', 'money', 'dollar']
+        if any(keyword in text for keyword in finance_keywords):
+            return 'finance'
+
+        # Default to lifestyle
+        return 'lifestyle'
+
+# Example usage function
+async def scrape_latest_news():
+    """Scrape latest news from all sources"""
+    async with RealNewsScraperService() as scraper:
+        articles = await scraper.scrape_all_sources(max_articles_per_source=5)
+        return articles 

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FOBOH News Aggregation & RAG Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .news-card {
+            margin-bottom: 1rem;
+            border-left: 4px solid #007bff;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .news-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .news-card.border-danger {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+            border: 2px solid #dc3545;
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .chat-container { 
+            height: 400px; 
+            overflow-y: auto; 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            background-color: #f8f9fa;
+            border-radius: 0.375rem;
+        }
+        .card-header-tabs .nav-link {
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .card-header-tabs .nav-link.active {
+            border-bottom-color: #007bff;
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+        .frequency-high {
+            background-color: #dc3545 !important;
+        }
+        .frequency-medium {
+            background-color: #fd7e14 !important;
+        }
+        .frequency-low {
+            background-color: #6c757d !important;
+        }
+        .breaking-news-section {
+            background: linear-gradient(135deg, #ffebee 0%, #ffffff 100%);
+            border: 2px solid #dc3545;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <nav class="navbar navbar-dark bg-primary mb-4">
+                    <div class="container-fluid">
+                        <span class="navbar-brand mb-0 h1">🚀 FOBOH News Aggregation & LangChain RAG</span>
+                        <div>
+                            <span class="badge bg-success me-1">GPT-4o</span>
+                            <span class="badge bg-info me-1">FAISS</span>
+                            <span class="badge bg-warning">LangChain</span>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <!-- Category Navigation Tabs -->
+                        <ul class="nav nav-tabs card-header-tabs" id="categoryTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">
+                                    📰 All News
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="sports-tab" data-bs-toggle="tab" data-bs-target="#sports" type="button" role="tab">
+                                    🏈 Sports
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="lifestyle-tab" data-bs-toggle="tab" data-bs-target="#lifestyle" type="button" role="tab">
+                                    🌟 Lifestyle
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="music-tab" data-bs-toggle="tab" data-bs-target="#music" type="button" role="tab">
+                                    🎵 Music
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="finance-tab" data-bs-toggle="tab" data-bs-target="#finance" type="button" role="tab">
+                                    💰 Finance
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary" onclick="extractNews()">🔄 Refresh All News</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="categoryTabContent">
+                            <!-- All News Tab -->
+                            <div class="tab-pane fade show active" id="all" role="tabpanel">
+                                <div id="news-container">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sports Tab -->
+                            <div class="tab-pane fade" id="sports" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">🏈 Sports News</h6>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCategory('sports')">
+                                        🔄 Refresh Sports
+                                    </button>
+                                </div>
+                                <div id="sports-container">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading sports articles...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Lifestyle Tab -->
+                            <div class="tab-pane fade" id="lifestyle" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">🌟 Lifestyle News</h6>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCategory('lifestyle')">
+                                        🔄 Refresh Lifestyle
+                                    </button>
+                                </div>
+                                <div id="lifestyle-container">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading lifestyle articles...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Music Tab -->
+                            <div class="tab-pane fade" id="music" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">🎵 Music News</h6>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCategory('music')">
+                                        🔄 Refresh Music
+                                    </button>
+                                </div>
+                                <div id="music-container">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading music articles...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Finance Tab -->
+                            <div class="tab-pane fade" id="finance" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">💰 Finance News</h6>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCategory('finance')">
+                                        🔄 Refresh Finance
+                                    </button>
+                                </div>
+                                <div id="finance-container">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading finance articles...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>🧠 LangChain RAG Chatbot</h5>
+                        <small class="text-muted">Powered by GPT-4o + FAISS</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chat-container" id="chatContainer"></div>
+                        <form onsubmit="sendMessage(event)">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="messageInput" placeholder="Ask about the news..." required>
+                                <button class="btn btn-primary" type="submit">Send</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6>📊 System Stats</h6>
+                    </div>
+                    <div class="card-body" id="stats-container">
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function generateArticleHTML(article, showCategory = true) {
+            // Validate article data and provide defaults
+            const safeArticle = {
+                title: article.title || 'No Title',
+                summary: article.summary || article.content || 'No content available',
+                source_name: article.source_name || 'Unknown Source',
+                author: article.author || 'Unknown',
+                category: article.category || 'general',
+                article_url: article.article_url || '#',
+                published_date: article.published_date,
+                extracted_date: article.extracted_date,
+                is_breaking_news: article.is_breaking_news || false,
+                frequency: article.frequency || 1,
+                priority_score: article.priority_score,
+                sentiment_score: article.sentiment_score
+            };
+            
+            const frequencyBadge = safeArticle.frequency >= 3 ? 'frequency-high' : safeArticle.frequency >= 2 ? 'frequency-medium' : 'frequency-low';
+            
+            return `
+                <div class="card news-card ${safeArticle.is_breaking_news ? 'border-danger' : ''}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-0">
+                                ${safeArticle.is_breaking_news ? '<span class="badge bg-danger me-2 pulse">🚨 BREAKING</span>' : ''}
+                                ${safeArticle.title}
+                            </h6>
+                            <div class="text-end">
+                                <span class="badge ${frequencyBadge}">
+                                    📊 Freq: ${safeArticle.frequency}
+                                </span>
+                                ${safeArticle.priority_score ? `<br><small class="text-muted">Priority: ${safeArticle.priority_score.toFixed(1)}</small>` : ''}
+                            </div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <p class="card-text text-muted small mb-1">
+                                    📰 <strong>Source:</strong> ${safeArticle.source_name}
+                                </p>
+                                <p class="card-text text-muted small mb-1">
+                                    ✍️ <strong>Author:</strong> ${safeArticle.author}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                ${showCategory ? `<p class="card-text text-muted small mb-1">
+                                    📂 <strong>Category:</strong> ${safeArticle.category}
+                                </p>` : ''}
+                                <p class="card-text text-muted small mb-1">
+                                    📅 <strong>Published:</strong> ${safeArticle.published_date ? new Date(safeArticle.published_date).toLocaleDateString() : 'Unknown'}
+                                </p>
+                                ${!showCategory ? `<p class="card-text text-muted small mb-1">
+                                    🔄 <strong>Extracted:</strong> ${safeArticle.extracted_date ? new Date(safeArticle.extracted_date).toLocaleTimeString() : 'Unknown'}
+                                </p>` : ''}
+                            </div>
+                        </div>
+                        <p class="card-text">${safeArticle.summary}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="${safeArticle.article_url}" target="_blank" class="btn btn-sm btn-outline-primary">📖 Read Full Article</a>
+                            ${safeArticle.sentiment_score ? `<span class="badge ${safeArticle.sentiment_score > 0.1 ? 'bg-success' : safeArticle.sentiment_score < -0.1 ? 'bg-warning' : 'bg-secondary'}">
+                                ${safeArticle.sentiment_score > 0.1 ? '😊 Positive' : safeArticle.sentiment_score < -0.1 ? '😐 Negative' : '😐 Neutral'}
+                            </span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadNews() {
+            try {
+                const response = await fetch('/api/articles?limit=20');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const articles = await response.json();
+                
+                const container = document.getElementById('news-container');
+                if (!Array.isArray(articles) || articles.length === 0) {
+                    container.innerHTML = '<div class="alert alert-info">No articles found. Click "Refresh All News" to load articles.</div>';
+                    return;
+                }
+                
+                // Validate and clean article data
+                const validArticles = articles.filter(article => {
+                    return article && article.title && article.content;
+                });
+                
+                if (validArticles.length === 0) {
+                    container.innerHTML = '<div class="alert alert-warning">No valid articles found. Please try refreshing the news.</div>';
+                    return;
+                }
+                
+                // Sort articles: Breaking news first, then by priority score
+                const sortedArticles = validArticles.sort((a, b) => {
+                    if (a.is_breaking_news && !b.is_breaking_news) return -1;
+                    if (!a.is_breaking_news && b.is_breaking_news) return 1;
+                    return (b.priority_score || 0) - (a.priority_score || 0);
+                });
+
+                container.innerHTML = sortedArticles.map(article => generateArticleHTML(article, true)).join('');
+            } catch (error) {
+                console.error('Error loading news:', error);
+                document.getElementById('news-container').innerHTML = `<div class="alert alert-danger">Error loading news: ${error.message}</div>`;
+            }
+        }
+
+        async function loadCategoryNews(category) {
+            try {
+                const response = await fetch(`/api/categories/${category}/highlights`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const articles = await response.json();
+                
+                const container = document.getElementById(`${category}-container`);
+                if (!Array.isArray(articles) || articles.length === 0) {
+                    container.innerHTML = `<div class="alert alert-info">No ${category} articles found. Try refreshing or check back later.</div>`;
+                    return;
+                }
+                
+                // Validate and clean article data
+                const validArticles = articles.filter(article => {
+                    return article && article.title && article.content;
+                });
+                
+                if (validArticles.length === 0) {
+                    container.innerHTML = `<div class="alert alert-warning">No valid ${category} articles found. Please try refreshing.</div>`;
+                    return;
+                }
+                
+                // Sort articles: Breaking news first, then by priority score
+                const sortedArticles = validArticles.sort((a, b) => {
+                    if (a.is_breaking_news && !b.is_breaking_news) return -1;
+                    if (!a.is_breaking_news && b.is_breaking_news) return 1;
+                    return (b.priority_score || 0) - (a.priority_score || 0);
+                });
+
+                container.innerHTML = sortedArticles.map(article => generateArticleHTML(article, false)).join('');
+            } catch (error) {
+                console.error(`Error loading ${category} news:`, error);
+                document.getElementById(`${category}-container`).innerHTML = `<div class="alert alert-danger">Error loading ${category} news: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshCategory(category) {
+            const container = document.getElementById(`${category}-container`);
+            container.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Refreshing ${category} articles...</p>
+                </div>
+            `;
+            
+            await loadCategoryNews(category);
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('stats-container').innerHTML = `
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="h4 text-primary">${stats.total_articles}</div>
+                            <small class="text-muted">Total Articles</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h4 text-danger">${stats.breaking_news}</div>
+                            <small class="text-muted">Breaking News</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="small">
+                        <div><strong>LLM:</strong> ${stats.ai_status.llm_model || 'GPT-4o'} ✅</div>
+                        <div><strong>Vector Store:</strong> ${stats.rag_status.vector_store_type || 'FAISS'} ✅</div>
+                        <div><strong>Embeddings:</strong> ${stats.ai_status.embedding_model || 'OpenAI'}</div>
+                        <div><strong>Articles:</strong> ${stats.rag_status.database_size} articles</div>
+                        ${stats.total_chunks ? `<div><strong>Chunks:</strong> ${stats.total_chunks} chunks</div>` : ''}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function sendMessage(event) {
+            event.preventDefault();
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            const chatContainer = document.getElementById('chatContainer');
+            
+            // Add user message
+            chatContainer.innerHTML += `
+                <div class="mb-2">
+                    <div class="badge bg-primary">You</div>
+                    <div class="mt-1">${message}</div>
+                </div>
+            `;
+            
+            input.value = '';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            try {
+                const formData = new FormData();
+                formData.append('message', message);
+                
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // Add bot response
+                chatContainer.innerHTML += `
+                    <div class="mb-3">
+                        <div class="badge bg-success">🧠 LangChain Bot (${result.model_used || 'GPT-4o'})</div>
+                        <div class="mt-1">${result.response}</div>
+                        ${result.sources_used > 0 ? `<small class="text-muted">📚 Sources: ${result.sources_used} articles | 🔍 Vector: ${result.vector_store || 'FAISS'}</small>` : ''}
+                    </div>
+                `;
+                
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                
+            } catch (error) {
+                console.error('Error sending message:', error);
+                chatContainer.innerHTML += `
+                    <div class="mb-3">
+                        <div class="badge bg-danger">Error</div>
+                        <div class="mt-1">Sorry, there was an error processing your message.</div>
+                    </div>
+                `;
+            }
+        }
+
+        async function extractNews() {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '⏳ Extracting...';
+            button.disabled = true;
+            
+            try {
+                await fetch('/api/extract-news', { method: 'POST' });
+                setTimeout(() => {
+                    loadNews();
+                    loadStats();
+                }, 3000);
+                
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error extracting news:', error);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+
+        // Tab event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners for tab switches
+            const categoryTabs = document.querySelectorAll('#categoryTabs button[data-bs-toggle="tab"]');
+            categoryTabs.forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function (event) {
+                    const targetId = event.target.getAttribute('data-bs-target');
+                    const category = targetId.replace('#', '');
+                    
+                    // Load category content when tab is shown (except for 'all' tab)
+                    if (category !== 'all') {
+                        const container = document.getElementById(`${category}-container`);
+                        // Only load if container is empty or shows loading
+                        if (container.innerHTML.includes('Loading') || container.innerHTML.includes('spinner-border')) {
+                            loadCategoryNews(category);
+                        }
+                    }
+                });
+            });
+        });
+
+        // Load initial data
+        loadNews();
+        loadStats();
+        
+        // Refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,168 @@
+{
+  "sources": {
+    "sports": [
+      {
+        "name": "ABC Sport",
+        "url": "https://www.abc.net.au/news/sport/",
+        "rss_feed": "https://www.abc.net.au/news/feed/2942460/rss.xml",
+        "type": "rss",
+        "selectors": {
+          "title": "h1, .article-heading",
+          "content": ".article-content, .story-body",
+          "author": ".byline-name, .author",
+          "date": ".timestamp, .date"
+        }
+      },
+      {
+        "name": "Nine Sport",
+        "url": "https://www.9news.com.au/sport",
+        "rss_feed": "https://www.9news.com.au/rss",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".story__body",
+          "author": ".story__author",
+          "date": ".story__time"
+        }
+      },
+      {
+        "name": "Fox Sports Australia",
+        "url": "https://www.foxsports.com.au/",
+        "type": "web_scraping",
+        "selectors": {
+          "articles": ".story-block",
+          "title": "h3 a, .story-headline",
+          "content": ".story-body",
+          "author": ".author-name",
+          "date": ".story-timestamp"
+        }
+      }
+    ],
+    "lifestyle": [
+      {
+        "name": "ABC Lifestyle",
+        "url": "https://www.abc.net.au/news/lifestyle/",
+        "rss_feed": "https://www.abc.net.au/news/feed/2942462/rss.xml",
+        "type": "rss",
+        "selectors": {
+          "title": "h1, .article-heading",
+          "content": ".article-content, .story-body",
+          "author": ".byline-name, .author",
+          "date": ".timestamp, .date"
+        }
+      },
+      {
+        "name": "Nine Honey",
+        "url": "https://honey.nine.com.au/",
+        "rss_feed": "https://honey.nine.com.au/rss",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".article-content",
+          "author": ".author",
+          "date": ".date"
+        }
+      },
+      {
+        "name": "Body+Soul",
+        "url": "https://www.bodyandsoul.com.au/",
+        "type": "web_scraping",
+        "selectors": {
+          "articles": ".article-tile",
+          "title": ".article-title",
+          "content": ".article-body",
+          "author": ".author-name",
+          "date": ".publish-date"
+        }
+      }
+    ],
+    "music": [
+      {
+        "name": "ABC Arts & Culture",
+        "url": "https://www.abc.net.au/news/arts-culture/",
+        "rss_feed": "https://www.abc.net.au/news/feed/2942464/rss.xml",
+        "type": "rss",
+        "selectors": {
+          "title": "h1, .article-heading",
+          "content": ".article-content, .story-body",
+          "author": ".byline-name, .author",
+          "date": ".timestamp, .date"
+        }
+      },
+      {
+        "name": "Music Feeds",
+        "url": "https://musicfeeds.com.au/",
+        "rss_feed": "https://musicfeeds.com.au/feed/",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".entry-content",
+          "author": ".author",
+          "date": ".date"
+        }
+      },
+      {
+        "name": "Double J Music News",
+        "url": "https://www.abc.net.au/doublej/music-news/",
+        "rss_feed": "https://www.abc.net.au/doublej/feed/",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".article-content",
+          "author": ".author",
+          "date": ".date"
+        }
+      },
+      {
+        "name": "The Brag Music",
+        "url": "https://thebrag.com/music/",
+        "rss_feed": "https://thebrag.com/feed/",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".entry-content",
+          "author": ".author",
+          "date": ".date"
+        }
+      }
+    ],
+    "finance": [
+      {
+        "name": "ABC Business",
+        "url": "https://www.abc.net.au/news/business/",
+        "rss_feed": "https://www.abc.net.au/news/feed/2942468/rss.xml",
+        "type": "rss",
+        "selectors": {
+          "title": "h1, .article-heading",
+          "content": ".article-content, .story-body",
+          "author": ".byline-name, .author",
+          "date": ".timestamp, .date"
+        }
+      },
+      {
+        "name": "Australian Financial Review",
+        "url": "https://www.afr.com/",
+        "type": "web_scraping",
+        "selectors": {
+          "articles": ".story-card",
+          "title": ".story-title",
+          "content": ".story-summary",
+          "author": ".story-author",
+          "date": ".story-time"
+        }
+      },
+      {
+        "name": "Nine Finance",
+        "url": "https://www.9news.com.au/finance",
+        "rss_feed": "https://www.9news.com.au/rss",
+        "type": "rss",
+        "selectors": {
+          "title": "h1",
+          "content": ".story__body",
+          "author": ".story__author",
+          "date": ".story__time"
+        }
+      }
+    ]
+  }
+} 
